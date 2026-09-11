@@ -1,203 +1,39 @@
 -- ==========================================
--- 1. YÜKLENME KONTROLÜ
--- ==========================================
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-
--- ==========================================
--- 2. ANTI-DUPLICATE
--- ==========================================
-if getgenv().XenoSlappleFarmLoaded then
-    if game:GetService("CoreGui"):FindFirstChild("XenoSlappleUI") then
-        game:GetService("CoreGui").XenoSlappleUI:Destroy()
-    end
-end
-getgenv().XenoSlappleFarmLoaded = true
-
-local UserInputService = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualUser = game:GetService("VirtualUser")
-local Workspace = game:GetService("Workspace")
-
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
-
--- ==========================================
--- 3. DURUM KAYDI
--- ==========================================
-local stateFileName = "XenoSlappleFarmState.txt"
-
-local function isFarmingActive()
-    if isfile and isfile(stateFileName) then
-        return readfile(stateFileName) == "true"
-    end
-    return false
-end
-
-local function saveFarmingState(state)
-    if writefile then
-        writefile(stateFileName, tostring(state))
-    end
-end
-
-local isFarming = isFarmingActive()
-
--- ==========================================
--- 4. ARAYÜZ (GUI)
--- ==========================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "XenoSlappleUI"
-ScreenGui.Parent = CoreGui
-ScreenGui.ResetOnSpawn = false
-
-local MainButton = Instance.new("TextButton")
-MainButton.Size = UDim2.new(0, 150, 0, 50)
-MainButton.Position = UDim2.new(0.5, -75, 0.1, 0)
-MainButton.BackgroundColor3 = isFarming and Color3.fromRGB(40, 200, 40) or Color3.fromRGB(200, 40, 40)
-MainButton.Text = isFarming and "Farm: AÇIK" or "Farm: KAPALI"
-MainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-MainButton.Font = Enum.Font.GothamBold
-MainButton.TextSize = 18
-MainButton.BorderSizePixel = 0
-MainButton.Parent = ScreenGui
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = MainButton
-
-local dragging, dragInput, dragStart, startPos
-MainButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainButton.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
-    end
-end)
-MainButton.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        MainButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.K then
-        ScreenGui.Enabled = not ScreenGui.Enabled
-    end
-end)
-
--- ==========================================
--- 5. SERVER HOP & FARM MANTIĞI
+-- 5. HIZLANDIRILMIŞ SERVER HOP & FARM MANTIĞI
 -- ==========================================
 local function serverHop()
     if not isFarming then return end
-    MainButton.Text = "Server Aranıyor..."
+    MainButton.Text = "Hızlı Sunucu Aranıyor..."
     MainButton.BackgroundColor3 = Color3.fromRGB(200, 150, 40)
     
     local PlaceId = game.PlaceId
-    local servers = {}
+    
+    -- "sortOrder=Asc" ile API'den ilk olarak EN AZ oyuncusu olan sunucuları ister.
+    local api_url = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=10"
+    
     local success, result = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Desc&limit=100"))
+        return HttpService:JSONDecode(game:HttpGet(api_url))
     end)
     
     if success and result and result.data then
         for _, v in ipairs(result.data) do
-            if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) and v.playing < v.maxPlayers and v.id ~= game.JobId then
-                table.insert(servers, v.id)
+            -- En az 1 kişinin olduğu, ama dolu olmayan (oynanabilir) farklı bir sunucu arıyoruz
+            if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) then
+                if v.playing > 0 and v.playing < v.maxPlayers and v.id ~= game.JobId then
+                    
+                    if queue_on_teleport then
+                        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/ZuRciu550/slap-farm/refs/heads/main/lua"))()')
+                    end
+                    
+                    MainButton.Text = "Bulundu! Geçiliyor..."
+                    TeleportService:TeleportToPlaceInstance(PlaceId, v.id, LocalPlayer)
+                    return -- Işınlanma emri verildi, fonksiyonu durdur
+                end
             end
         end
     end
     
-    if #servers > 0 then
-        local randomServer = servers[math.random(1, #servers)]
-        
-        -- KRİTİK EKLENTİ: Teleport olmadan hemen önce yeni sunucuda scriptin zorla çalıştırılmasını sıraya alıyoruz.
-        if queue_on_teleport then
-            queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/ZuRciu550/slap-farm/refs/heads/main/lua"))()')
-        end
-        
-        TeleportService:TeleportToPlaceInstance(PlaceId, randomServer, LocalPlayer)
-    else
-        task.wait(3)
-        serverHop()
-    end
-end
-
-local function startFarmingLogic()
-    if not isFarming then return end
-    
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart", 10)
-    
-    if not hrp then return end 
-
-    hrp.CFrame = CFrame.new(-1310.16211, 329.901642, 3.98608398, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-    task.wait(0.5)
-    
-    if not isFarming then return end
-
-    local slapples = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name == "Slapple" or obj.Name == "GoldenSlapple" then
-            local glove = obj:FindFirstChild("Glove")
-            if glove and glove:IsA("MeshPart") and glove.Transparency == 0 then
-                table.insert(slapples, glove)
-            end
-        end
-    end
-    
-    for _, glove in ipairs(slapples) do
-        if not isFarming then return end
-        
-        if glove and glove.Parent and glove.Transparency == 0 then
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = glove.CFrame
-                task.wait(0.25) 
-            end
-        end
-    end
-    
-    if isFarming then
-        serverHop()
-    end
-end
-
--- ==========================================
--- 6. BAŞLATMA 
--- ==========================================
-MainButton.MouseButton1Click:Connect(function()
-    isFarming = not isFarming
-    saveFarmingState(isFarming)
-    
-    if isFarming then
-        MainButton.BackgroundColor3 = Color3.fromRGB(40, 200, 40)
-        MainButton.Text = "Farm: AÇIK"
-        task.spawn(startFarmingLogic)
-    else
-        MainButton.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-        MainButton.Text = "Farm: KAPALI"
-    end
-end)
-
-if isFarming then
-    task.spawn(function()
-        task.wait(2) 
-        startFarmingLogic()
-    end)
+    -- Eğer API'den gelen 10 sunucuda uygun yer yoksa 1 saniye bekleyip tekrar dener
+    task.wait(1)
+    serverHop()
 end
