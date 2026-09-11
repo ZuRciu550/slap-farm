@@ -11,7 +11,6 @@ local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("Loc
 -- ==========================================
 -- 2. GUI GÜVENLİĞİ VE ANTI-DUPLICATE
 -- ==========================================
--- Bazı executorlar CoreGui'ye erişemeyebilir, bu yüzden güvenli bir GUI ebeveyni seçiyoruz
 local GuiParent = (gethui and gethui()) or game:GetService("CoreGui")
 if not pcall(function() local _ = GuiParent.Name end) then
     GuiParent = LocalPlayer:WaitForChild("PlayerGui")
@@ -25,7 +24,6 @@ end
 getgenv().XenoSlappleFarmLoaded = true
 
 local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualUser = game:GetService("VirtualUser")
 local Workspace = game:GetService("Workspace")
@@ -109,39 +107,20 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ==========================================
--- 5. HIZLI SERVER HOP & FARM MANTIĞI
+-- 5. ANINDA RASTGELE SERVER HOP & FARM MANTIĞI
 -- ==========================================
 local function serverHop()
     if not isFarming then return end
-    MainButton.Text = "Hızlı Aranıyor..."
+    MainButton.Text = "Geçiliyor..."
     MainButton.BackgroundColor3 = Color3.fromRGB(200, 150, 40)
     
-    local PlaceId = game.PlaceId
-    local api_url = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=10"
-    
-    local success, result = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet(api_url))
-    end)
-    
-    if success and result and result.data then
-        for _, v in ipairs(result.data) do
-            if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) then
-                if v.playing > 0 and v.playing < v.maxPlayers and v.id ~= game.JobId then
-                    
-                    if queue_on_teleport then
-                        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/ZuRciu550/slap-farm/refs/heads/main/lua"))()')
-                    end
-                    
-                    MainButton.Text = "Geçiliyor..."
-                    TeleportService:TeleportToPlaceInstance(PlaceId, v.id, LocalPlayer)
-                    return 
-                end
-            end
-        end
+    -- Teleport olurken GitHub kodunu tekrar enjekte etmeyi sıraya al
+    if queue_on_teleport then
+        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/ZuRciu550/slap-farm/refs/heads/main/lua"))()')
     end
     
-    task.wait(1)
-    serverHop()
+    -- API'den sunucu aramak yerine oyuna doğrudan bizi rastgele bir sunucuya atmasını söylüyoruz
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end
 
 local function startFarmingLogic()
@@ -152,11 +131,13 @@ local function startFarmingLogic()
     
     if not hrp then return end 
 
+    -- Başlangıç noktasına ışınlan
     hrp.CFrame = CFrame.new(-1310.16211, 329.901642, 3.98608398, 1, 0, 0, 0, 1, 0, 0, 0, 1)
     task.wait(0.5)
     
     if not isFarming then return end
 
+    -- Slapple'ları bul
     local slapples = {}
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name == "Slapple" or obj.Name == "GoldenSlapple" then
@@ -167,6 +148,7 @@ local function startFarmingLogic()
         end
     end
     
+    -- Meyveleri topla
     for _, glove in ipairs(slapples) do
         if not isFarming then return end
         
@@ -178,6 +160,7 @@ local function startFarmingLogic()
         end
     end
     
+    -- İş bitince anında zıpla
     if isFarming then
         serverHop()
     end
